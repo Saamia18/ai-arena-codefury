@@ -1,9 +1,24 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Brand } from '../components/Navigation'
 
 type QuestQuestion = { id: string; prompt: string; hint: string; options: { label: string; value: string; description: string }[] }
 type DNAProfile = { accuracy: number; speed: number; cost: number; privacy: number; easeOfUse: number }
+
+const dnaDimensions = [
+  { key: 'accuracy', label: 'Accuracy' },
+  { key: 'speed', label: 'Speed' },
+  { key: 'cost', label: 'Cost' },
+  { key: 'privacy', label: 'Privacy' },
+  { key: 'easeOfUse', label: 'Ease of use' },
+] as const
+
+const questApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+
+function isDNAProfile(value: unknown): value is DNAProfile {
+  if (!value || typeof value !== 'object') return false
+  return dnaDimensions.every(({ key }) => typeof (value as Record<string, unknown>)[key] === 'number')
+}
 
 // Confirm these IDs and answer values with the backend scoring contract before production use.
 const questQuestions: QuestQuestion[] = [
@@ -30,9 +45,9 @@ export function QuestPage() {
     setIsSubmitting(true)
     setError('')
     try {
-      const response = await fetch('/api/quest/submit', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers: questQuestions.map(({ id }) => ({ questionId: id, answer: answers[id] })) }) })
-      const payload = await response.json().catch(() => ({})) as { profile?: DNAProfile; error?: string }
-      if (!response.ok || !payload.profile) throw new Error(payload.error || 'We could not shape your AI DNA. Please try again.')
+      const response = await fetch(`${questApiBaseUrl}/api/quest/submit`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers: questQuestions.map(({ id }) => ({ questionId: id, answer: answers[id] })) }) })
+      const payload = await response.json().catch(() => ({})) as { profile?: DNAProfile; error?: string; message?: string }
+      if (!response.ok || !payload.profile) throw new Error(payload.error || payload.message || 'We could not shape your AI DNA. Please try again.')
       navigate('/dna', { state: { profile: payload.profile } })
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'We could not shape your AI DNA. Please try again.')
@@ -43,7 +58,26 @@ export function QuestPage() {
 }
 
 function Placeholder({ eyebrow, title, description, next }: { eyebrow: string; title: string; description: string; next?: [string, string] }) { return <section className="placeholder page-container"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p>{next && <Link className="button" to={next[1]}>{next[0]} <span>→</span></Link>}</section> }
-export const DnaProfilePage = () => <Placeholder eyebrow="Step 02 / AI DNA" title="Give your priorities a signal." description="Balance accuracy, speed, cost, privacy, and ease of use to form your AI DNA." next={['Open the arena', '/arena']} />
+export function DnaProfilePage() {
+  const location = useLocation()
+  const profile = isDNAProfile((location.state as { profile?: unknown } | null)?.profile) ? (location.state as { profile: DNAProfile }).profile : null
+
+  if (!profile) return <section className="placeholder page-container"><p className="eyebrow">Step 02 / AI DNA</p><h1>Give your priorities a signal.</h1><p>Complete your AI Quest first to generate a profile from your answers.</p><Link className="button" to="/quest">Start AI Quest <span>→</span></Link></section>
+
+  const rankedDimensions = dnaDimensions.map((dimension) => ({ ...dimension, value: profile[dimension.key] })).sort((a, b) => b.value - a.value)
+  const [primary, secondary] = rankedDimensions
+  const points = dnaDimensions.map((dimension, index) => {
+    const angle = (Math.PI * 2 * index) / dnaDimensions.length - Math.PI / 2
+    const radius = 84 * profile[dimension.key]
+    return `${120 + Math.cos(angle) * radius},${120 + Math.sin(angle) * radius}`
+  }).join(' ')
+  const guidePoints = dnaDimensions.map((_, index) => {
+    const angle = (Math.PI * 2 * index) / dnaDimensions.length - Math.PI / 2
+    return `${120 + Math.cos(angle) * 84},${120 + Math.sin(angle) * 84}`
+  }).join(' ')
+
+  return <section className="dna-page page-container"><div className="dna-topline"><span>QUEST COMPLETE</span><span>YOUR PERSONAL AI DNA</span></div><div className="dna-grid"><div className="dna-copy"><p className="eyebrow"><i /> Step 02 / AI DNA</p><h1>Give your priorities<br />a <em>signal.</em></h1><p>Your profile is shaped by the choices you made in your Quest—not by a generic preset.</p><div className="dna-summary"><span>YOUR SIGNAL</span><strong>You&apos;re optimizing for {primary.label.toLowerCase()} and {secondary.label.toLowerCase()} first.</strong></div><Link className="button" to="/arena" state={{ profile }}>Open the arena <span>→</span></Link></div><div className="dna-visual"><div className="dna-radar"><svg viewBox="0 0 240 240" role="img" aria-label="AI DNA radar chart"><polygon className="dna-radar__guide" points={guidePoints} /><polygon className="dna-radar__shape" points={points} />{dnaDimensions.map((dimension, index) => { const angle = (Math.PI * 2 * index) / dnaDimensions.length - Math.PI / 2; return <g key={dimension.key}><line x1="120" y1="120" x2={120 + Math.cos(angle) * 84} y2={120 + Math.sin(angle) * 84} /><text x={120 + Math.cos(angle) * 109} y={120 + Math.sin(angle) * 109} textAnchor="middle" dominantBaseline="middle">{dimension.label}</text></g> })}</svg><div className="dna-radar__center"><strong>AI</strong><span>DNA</span></div></div><div className="dna-caption">BACKEND-GENERATED PROFILE</div></div></div><div className="dna-bars">{dnaDimensions.map((dimension) => { const percent = Math.round(profile[dimension.key] * 100); return <div className="dna-bar" key={dimension.key}><div><strong>{dimension.label}</strong><span>{percent}%</span></div><div className="dna-bar__track"><span style={{ width: `${percent}%` }} /></div></div> })}</div></section>
+}
 export const ArenaPage = () => <Placeholder eyebrow="Step 03 / Arena" title="Let the contenders compete." description="Your shortlisted models will battle against your personal AI DNA." next={['View result', '/result']} />
 export const ResultPage = () => <Placeholder eyebrow="Step 04 / Trust Score" title="A winner, with receipts." description="Explore a transparent score that shows why this model is the right match." next={['Get model passport', '/passport']} />
 export const PassportPage = () => <Placeholder eyebrow="Step 05 / Model Passport" title="Your model's proof of fit." description="A portable, shareable record of its strengths, score, and winning rationale." next={['Configure deployment', '/deployment']} />
