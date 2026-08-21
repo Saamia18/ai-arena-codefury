@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Brand } from '../components/Navigation'
 
 type QuestQuestion = { id: string; prompt: string; hint: string; options: { label: string; value: string; description: string }[] }
@@ -9,6 +9,25 @@ type TrustBreakdown = { accuracy: number; speed: number; cost: number; privacy: 
 type TrustScoreResponse = { modelId: string; overallTrustScore: number; breakdown: TrustBreakdown }
 type WhyNotReason = { modelId: string; reason: string }
 type ResultState = { profile?: unknown; winner?: unknown; runnerUps?: unknown }
+type SavedResult = { id: string; userId: string; winner: AIModel; runnerUps: AIModel[]; trustScore: TrustScoreResponse; profile: DNAProfile; explanation: string; whyNotReasons?: WhyNotReason[]; createdAt: string }
+
+const mockPassportResult: SavedResult = {
+  id: 'demo-aether-one',
+  userId: 'demo-user',
+  winner: { id: 'aether-one', name: 'Aether One', provider: 'AI Arena Labs', description: 'Reasoning model for complex tasks', accuracy: 94, speed: 82, cost: 74, privacy: 91, easeOfUse: 88, license: 'Demo evaluation license' },
+  runnerUps: [
+    { id: 'velocity', name: 'Velocity', provider: 'AI Arena Labs', accuracy: 86, speed: 97, cost: 81, privacy: 76, easeOfUse: 84 },
+    { id: 'sentinel', name: 'Sentinel', provider: 'AI Arena Labs', accuracy: 88, speed: 76, cost: 78, privacy: 98, easeOfUse: 79 },
+  ],
+  trustScore: { modelId: 'aether-one', overallTrustScore: 94, breakdown: { accuracy: 96, speed: 84, cost: 79, privacy: 93, easeOfUse: 89, evidence: 95 } },
+  profile: { accuracy: 0.35, speed: 0.16, cost: 0.12, privacy: 0.22, easeOfUse: 0.15 },
+  explanation: 'Aether One is the strongest fit for this profile because it pairs high reasoning accuracy with strong privacy support, matching the priorities expressed in the AI DNA.',
+  whyNotReasons: [
+    { modelId: 'velocity', reason: 'Velocity delivered faster responses, but its lower accuracy and privacy alignment made it a weaker fit for this mission.' },
+    { modelId: 'sentinel', reason: 'Sentinel led on privacy, but Aether One achieved a more balanced match across the full set of priorities.' },
+  ],
+  createdAt: '2026-08-22T10:30:00.000Z',
+}
 
 const dnaDimensions = [
   { key: 'accuracy', label: 'Accuracy' },
@@ -29,6 +48,19 @@ function isAIModel(value: unknown): value is AIModel {
   if (!value || typeof value !== 'object') return false
   const model = value as Record<string, unknown>
   return typeof model.id === 'string' && typeof model.name === 'string' && typeof model.provider === 'string' && dnaDimensions.every(({ key }) => typeof model[key] === 'number')
+}
+
+function isTrustScore(value: unknown): value is TrustScoreResponse {
+  if (!value || typeof value !== 'object') return false
+  const trustScore = value as Record<string, unknown>
+  const breakdown = trustScore.breakdown as Record<string, unknown> | undefined
+  return typeof trustScore.modelId === 'string' && typeof trustScore.overallTrustScore === 'number' && Boolean(breakdown) && [...dnaDimensions.map(({ key }) => key), 'evidence'].every((key) => typeof breakdown?.[key] === 'number')
+}
+
+function isSavedResult(value: unknown): value is SavedResult {
+  if (!value || typeof value !== 'object') return false
+  const result = value as Record<string, unknown>
+  return typeof result.id === 'string' && typeof result.userId === 'string' && isAIModel(result.winner) && Array.isArray(result.runnerUps) && result.runnerUps.every(isAIModel) && isTrustScore(result.trustScore) && isDNAProfile(result.profile) && typeof result.explanation === 'string' && typeof result.createdAt === 'string'
 }
 
 // Confirm these IDs and answer values with the backend scoring contract before production use.
@@ -158,7 +190,42 @@ export function ResultPage() {
 
   return <section className="result-page page-container"><div className="result-topline"><span>ARENA VERDICT</span><span>BACKEND-VERIFIED RESULT</span></div><div className="result-heading"><div><p className="eyebrow"><i /> Step 04 / Trust Score</p><h1>A winner, with<br /><em>receipts.</em></h1></div><p>Match Score and Trust Score measure different things. This verdict keeps both visible.</p></div><div className="result-grid"><article className="winner-card"><span className="winner-card__label">YOUR WINNING MODEL</span><div className="winner-card__model"><span>{winner.name.charAt(0)}</span><div><h2>{winner.name}</h2><p>{winner.provider}</p></div></div><div className="winner-card__score"><span>TRUST SCORE</span><strong>{trustScore?.overallTrustScore}</strong></div></article><article className="explanation-card"><span className="winner-card__label">WHY IT WON</span><p>{explanation}</p></article></div><section className="trust-section"><div><p className="eyebrow">Trust breakdown</p><h2>Confidence, made <em>visible.</em></h2></div><div className="trust-bars">{Object.entries(trustScore?.breakdown ?? {}).map(([label, value]) => <div className="trust-bar" key={label}><div><strong>{label === 'easeOfUse' ? 'Ease of use' : label}</strong><span>{value}</span></div><div><span style={{ width: `${value}%` }} /></div></div>)}</div></section><section className="runner-ups"><div><p className="eyebrow">Why not the others?</p><h2>Every contender gets an explanation.</h2></div><div>{whyNotReasons.map((reason) => <details key={reason.modelId}><summary>{runnerUps.find((model) => model.id === reason.modelId)?.name ?? reason.modelId}<span>+</span></summary><p>{reason.reason}</p></details>)}</div></section><div className="result-actions"><div>{saveError && <p className="result-error" role="alert">{saveError}</p>}</div><button className="button" type="button" onClick={saveResult} disabled={isSaving}>{isSaving ? 'Saving result…' : 'Save Model Passport'} <span>→</span></button></div></section>
 }
-export const PassportPage = () => <Placeholder eyebrow="Step 05 / Model Passport" title="Your model's proof of fit." description="A portable, shareable record of its strengths, score, and winning rationale." next={['Configure deployment', '/deployment']} />
+export function PassportPage() {
+  const { id } = useParams()
+  const usesMockPassport = !id || !questApiBaseUrl
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
+  const [result, setResult] = useState<SavedResult | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (usesMockPassport || !id) return
+    const controller = new AbortController()
+    const loadPassport = async () => {
+      setStatus('loading'); setError('')
+      try {
+        const response = await fetch(`${questApiBaseUrl}/api/results/${encodeURIComponent(id)}`, { credentials: 'include', signal: controller.signal })
+        const payload = await response.json().catch(() => ({})) as unknown
+        if (!response.ok) { const message = payload as { error?: string; message?: string }; throw new Error(message.error || message.message || 'We could not load this Model Passport.') }
+        if (!isSavedResult(payload)) throw new Error('The saved result returned an unexpected response.')
+        setResult(payload); setStatus('success')
+      } catch (caughtError) {
+        if (caughtError instanceof DOMException && caughtError.name === 'AbortError') return
+        setError(caughtError instanceof Error ? caughtError.message : 'We could not load this Model Passport.'); setStatus('error')
+      }
+    }
+    void loadPassport()
+    return () => controller.abort()
+  }, [id, usesMockPassport])
+
+  const passportResult = usesMockPassport ? mockPassportResult : result
+  if (!usesMockPassport && status === 'loading') return <section className="passport-page page-container"><p className="eyebrow"><i /> Step 05 / Model Passport</p><div className="passport-loading"><span /><strong>Retrieving your passport…</strong><small>Loading the saved Arena verdict</small></div></section>
+  if (!usesMockPassport && (status === 'error' || !passportResult)) return <section className="passport-page page-container"><p className="eyebrow"><i /> Step 05 / Model Passport</p><div className="passport-message"><h1>This passport is unavailable.</h1><p>{error}</p><Link className="button" to="/arena">Return to Arena <span>→</span></Link></div></section>
+
+  if (!passportResult) return null
+
+  const createdAt = new Date(passportResult.createdAt)
+  return <section className="passport-page page-container"><div className="passport-topline"><span>MODEL PASSPORT</span><span>RESULT ID / {passportResult.id}</span></div><div className="passport-heading"><div><p className="eyebrow"><i /> Step 05 / Model Passport</p><h1>Your model&apos;s<br /><em>proof of fit.</em></h1></div><p>A portable record of the Arena verdict, with the evidence that brought it home.</p></div><article className="passport-card"><div className="passport-card__top"><span>AI ARENA / VERIFIED MATCH</span><span>{Number.isNaN(createdAt.getTime()) ? passportResult.createdAt : createdAt.toLocaleDateString()}</span></div><div className="passport-card__hero"><div className="passport-mark">{passportResult.winner.name.charAt(0)}</div><div><h2>{passportResult.winner.name}</h2><p>{passportResult.winner.provider}</p></div><div className="passport-trust"><span>TRUST SCORE</span><strong>{passportResult.trustScore.overallTrustScore}</strong></div></div><div className="passport-card__body"><div><span>WHY IT FITS</span><p>{passportResult.explanation}</p></div><div className="passport-dna"><span>AI DNA SIGNAL</span>{dnaDimensions.map((dimension) => <div key={dimension.key}><small>{dimension.label}</small><b>{Math.round(passportResult.profile[dimension.key] * 100)}%</b></div>)}</div></div><div className="passport-card__footer"><span>BACKEND-VERIFIED PROFILE</span><span>{passportResult.winner.license ?? 'License information unavailable'}</span></div></article><section className="passport-details"><div className="passport-breakdown"><p className="eyebrow">Trust evidence</p><h2>Why you can trust it.</h2>{Object.entries(passportResult.trustScore.breakdown).map(([label, value]) => <div className="passport-bar" key={label}><div><span>{label === 'easeOfUse' ? 'Ease of use' : label}</span><b>{value}</b></div><i><em style={{ width: `${value}%` }} /></i></div>)}</div><div className="passport-runner-ups"><p className="eyebrow">Other contenders</p><h2>Close, but not your best fit.</h2>{passportResult.runnerUps.map((model) => <details key={model.id}><summary>{model.name}<span>{model.provider}</span></summary><p>{passportResult.whyNotReasons?.find((reason) => reason.modelId === model.id)?.reason ?? 'No saved explanation is available for this contender.'}</p></details>)}</div></section><div className="passport-actions"><span>Saved result · {passportResult.id}</span><Link className="button" to="/deployment" state={{ winner: passportResult.winner }}>Configure deployment <span>→</span></Link></div></section>
+}
 export const DeploymentPage = () => <Placeholder eyebrow="Step 06 / Deployment" title="Ready for the real world." description="Generate the configuration that takes your winning model from arena to application." />
 function AuthPage({ signup }: { signup?: boolean }) { return <section className="auth-page"><Brand /><div className="auth-card"><p className="eyebrow">{signup ? 'Create your profile' : 'Welcome back'}</p><h1>{signup ? 'Claim your place.' : 'Return to the arena.'}</h1>{signup && <input placeholder="Your name" />}<input placeholder="Email address" type="email" /><input placeholder="Password" type="password" /><button className="button">{signup ? 'Enter the arena' : 'Log in'} <span>→</span></button><p>{signup ? 'Already a challenger?' : 'New challenger?'} <Link to={signup ? '/login' : '/signup'}>{signup ? 'Log in' : 'Create an account'}</Link></p></div></section> }
 export const LoginPage = () => <AuthPage />
