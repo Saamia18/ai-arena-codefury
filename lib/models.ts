@@ -16,6 +16,13 @@ export async function listModels(): Promise<AIModel[]> {
   return models.map(toAIModel);
 }
 
+export async function getModelById(modelId: string): Promise<AIModel | null> {
+  const collection = await getModelsCollection();
+  const model = await collection.findOne({ id: modelId });
+
+  return model ? toAIModel(model) : null;
+}
+
 function toAIModel(model: WithId<AIModelDocument>): AIModel {
   const { _id, ...modelData } = model;
 
