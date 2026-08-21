@@ -21,5 +21,5 @@ export function ThemeToggle() {
 }
 
 export function Navigation() {
-  return <header className="navigation"><Brand /><nav><NavLink to="/quest">AI Quest</NavLink><NavLink to="/arena">Arena</NavLink><NavLink to="/passport">Passports</NavLink></nav><div className="navigation__actions"><ThemeToggle /><Link className="text-link" to="/login">Log in</Link><Link className="button button--small" to="/signup">Enter Arena <span>↗</span></Link></div></header>
+  return <header className="navigation"><Brand /><nav><NavLink to="/quest">AI Quest</NavLink><NavLink to="/arena">Arena</NavLink><NavLink to="/history">Passports</NavLink></nav><div className="navigation__actions"><ThemeToggle /><Link className="text-link" to="/login">Log in</Link><Link className="button button--small" to="/signup">Enter Arena <span>↗</span></Link></div></header>
 }
