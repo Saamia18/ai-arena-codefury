@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "db:seed": "tsx scripts/seed-models.ts"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.3.3",
@@ -19,6 +20,7 @@
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
+    "tsx": "^4.23.12",
     "typescript": "7.0.2"
   }
 }
