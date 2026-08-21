@@ -50,6 +50,23 @@ export interface ArenaRankResponse {
   rankings: ArenaRanking[];
 }
 
+export interface ArenaTestRequest {
+  modelIds: string[];
+  input: string;
+}
+
+export interface ArenaTestResult {
+  modelId: string;
+  name: string;
+  response: string;
+  latency: number;
+  fallback?: boolean;
+}
+
+export interface ArenaTestResponse {
+  results: ArenaTestResult[];
+}
+
 export interface TrustScoreRequest {
   modelId: string;
 }

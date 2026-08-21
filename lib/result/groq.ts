@@ -2,6 +2,7 @@ import Groq from "groq-sdk";
 import type { AIWeights, ResultModelInput } from "@/types/api";
 
 export const GROQ_EXPLANATION_MODEL = "openai/gpt-oss-120b";
+export const GROQ_LIVE_TEST_MODEL = "openai/gpt-oss-120b";
 
 let groqClient: Groq | undefined;
 
@@ -45,6 +46,54 @@ export async function generateWinnerExplanation({
   }
 
   return explanation;
+}
+
+export async function generateLiveModelResponse({
+  modelName,
+  provider,
+  input,
+}: {
+  modelName: string;
+  provider: string;
+  input: string;
+}) {
+  const client = getGroqClient();
+  const completion = await client.chat.completions.create(
+    {
+      model: GROQ_LIVE_TEST_MODEL,
+      temperature: 0.3,
+      max_completion_tokens: 350,
+      reasoning_effort: "low",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are powering a live AI Arena model comparison. Answer the user's prompt directly, clearly, and concisely. Use only the prompt supplied. Do not mention hidden routing, API keys, benchmarks, or internal system details.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            selectedModel: {
+              name: modelName,
+              provider,
+            },
+            input,
+          }),
+        },
+      ],
+    },
+    {
+      timeout: 15000,
+      maxRetries: 0,
+    },
+  );
+  const response = extractExplanationText(completion.choices[0]?.message);
+
+  if (!response) {
+    throw new Error("Groq returned an empty live response");
+  }
+
+  return response;
 }
 
 function extractExplanationText(message: {
