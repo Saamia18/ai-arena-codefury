@@ -22,6 +22,8 @@ export interface QuestSubmitRequest {
 
 export interface QuestSubmitResponse {
   profile: AIProfile;
+  questResultId?: string;
+  createdAt?: string;
 }
 
 export interface ArenaRankRequest {
@@ -99,6 +101,73 @@ export interface WhyNotReason {
 
 export interface WhyNotResponse {
   reasons: WhyNotReason[];
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+  createdAt: string;
+}
+
+export interface AuthSignupRequest {
+  email: string;
+  password: string;
+  name?: string;
+}
+
+export interface AuthLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  user: AuthUser;
+}
+
+export interface AuthMeResponse {
+  user: AuthUser | null;
+}
+
+export interface QuestHistoryItem {
+  id: string;
+  answers: QuestAnswer[];
+  weights: AIProfile;
+  createdAt: string;
+}
+
+export interface QuestHistoryResponse {
+  questResults: QuestHistoryItem[];
+}
+
+export interface SaveResultRequest {
+  winner: ResultModelInput;
+  runnerUps: ResultModelInput[];
+  profile: AIProfile;
+  explanation: string;
+}
+
+export interface SavedResult {
+  id: string;
+  winner: ResultModelInput;
+  runnerUps: ResultModelInput[];
+  trustScore: TrustScoreResponse;
+  profile: AIProfile;
+  explanation: string;
+  runnerUpReasons: WhyNotReason[];
+  createdAt: string;
+}
+
+export interface SaveResultResponse {
+  result: SavedResult;
+}
+
+export interface ResultsHistoryResponse {
+  results: SavedResult[];
+}
+
+export interface ResultPassportResponse {
+  result: SavedResult;
 }
 
 export interface ApiErrorResponse {
