@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AuthRequiredError, requireCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { saveQuestResult } from "@/lib/history";
 import { buildAIProfile } from "@/lib/scoring/quest";
 import type {
@@ -12,24 +12,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  let user;
-
-  try {
-    user = await requireCurrentUser(request);
-  } catch (error) {
-    if (error instanceof AuthRequiredError) {
-      return NextResponse.json<ApiErrorResponse>(
-        { error: "Authentication required" },
-        { status: 401 },
-      );
-    }
-
-    return NextResponse.json<ApiErrorResponse>(
-      { error: "Authentication service unavailable" },
-      { status: 503 },
-    );
-  }
-
   let body: Partial<QuestSubmitRequest>;
   let profile;
 
@@ -47,6 +29,12 @@ export async function POST(request: Request) {
   }
 
   try {
+    const user = await getCurrentUser(request);
+
+    if (!user) {
+      return NextResponse.json<QuestSubmitResponse>({ profile });
+    }
+
     const questResult = await saveQuestResult({
       userId: user.id,
       answers: body.answers ?? [],

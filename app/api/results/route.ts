@@ -7,7 +7,10 @@ import {
 import { explainWhyNotOthers } from "@/lib/result/why-not";
 import { getModelById } from "@/lib/models";
 import { saveArenaResult, listArenaResults } from "@/lib/history";
-import { calculateTrustScore } from "@/lib/scoring/trust";
+import {
+  calculateTrustScore,
+  calculateTrustScoreFromResultModel,
+} from "@/lib/scoring/trust";
 import { validateWeights } from "@/lib/scoring/weights";
 import type {
   ApiErrorResponse,
@@ -91,16 +94,16 @@ export async function POST(request: Request) {
     }
 
     const winnerModelId = getResultModelId(winner);
-    const winnerModel = await getModelById(winnerModelId);
+    let trustScore;
 
-    if (!winnerModel) {
-      return NextResponse.json<ApiErrorResponse>(
-        { error: "Winner model not found" },
-        { status: 404 },
-      );
+    try {
+      const winnerModel = await getModelById(winnerModelId);
+      trustScore = winnerModel
+        ? calculateTrustScore(winnerModel)
+        : calculateTrustScoreFromResultModel(winner);
+    } catch {
+      trustScore = calculateTrustScoreFromResultModel(winner);
     }
-
-    const trustScore = calculateTrustScore(winnerModel);
     const runnerUpReasons = explainWhyNotOthers(profile, winner, runnerUps);
     const result = await saveArenaResult({
       userId: user.id,

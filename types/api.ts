@@ -68,7 +68,8 @@ export interface ArenaTestResponse {
 }
 
 export interface TrustScoreRequest {
-  modelId: string;
+  modelId?: string;
+  winner?: ResultModelInput;
 }
 
 export type TrustScoreBreakdown = AIWeights & {
@@ -166,12 +167,14 @@ export interface SaveResultRequest {
 
 export interface SavedResult {
   id: string;
+  userId?: string;
   winner: ResultModelInput;
   runnerUps: ResultModelInput[];
   trustScore: TrustScoreResponse;
   profile: AIProfile;
   explanation: string;
   runnerUpReasons: WhyNotReason[];
+  whyNotReasons?: WhyNotReason[];
   createdAt: string;
 }
 

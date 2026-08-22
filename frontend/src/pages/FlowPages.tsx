@@ -11,7 +11,7 @@ type WhyNotReason = { modelId: string; reason: string }
 type ResultState = { profile?: unknown; winner?: unknown; runnerUps?: unknown; matchScore?: unknown }
 type SavedResult = { id: string; userId: string; winner: AIModel; runnerUps: AIModel[]; trustScore: TrustScoreResponse; profile: DNAProfile; explanation: string; whyNotReasons?: WhyNotReason[]; createdAt: string }
 type HistoryEntry = { id: string; questId: string; winner: string; provider: string; trustScore: number; matchScore: number; profile: DNAProfile; createdAt: string; status: 'Saved' | 'Completed' }
-type PassportPageState = { matchScore?: number; ranking?: number; bestUseCases?: string[] }
+type PassportPageState = { result?: SavedResult; matchScore?: number; ranking?: number; bestUseCases?: string[] }
 
 const mockPassportResult: SavedResult = {
   id: 'demo-aether-one',
@@ -82,6 +82,26 @@ function isSavedResult(value: unknown): value is SavedResult {
   return typeof result.id === 'string' && typeof result.userId === 'string' && isAIModel(result.winner) && Array.isArray(result.runnerUps) && result.runnerUps.every(isAIModel) && isTrustScore(result.trustScore) && isDNAProfile(result.profile) && typeof result.explanation === 'string' && typeof result.createdAt === 'string'
 }
 
+function parseSavedResult(payload: unknown): SavedResult | null {
+  const root = payload && typeof payload === 'object' && 'result' in payload && (payload as { result?: unknown }).result
+    ? (payload as { result: unknown }).result
+    : payload
+  if (!root || typeof root !== 'object') return null
+  const result = root as Record<string, unknown>
+  const winner = result.winner && typeof result.winner === 'object' ? { ...(result.winner as object), id: (result.winner as { id?: string; modelId?: string }).id ?? (result.winner as { modelId?: string }).modelId } : result.winner
+  const runnerUps = Array.isArray(result.runnerUps)
+    ? result.runnerUps.map((model) => model && typeof model === 'object' ? { ...(model as object), id: (model as { id?: string; modelId?: string }).id ?? (model as { modelId?: string }).modelId } : model)
+    : result.runnerUps
+  const normalized = {
+    ...result,
+    winner,
+    runnerUps,
+    userId: typeof result.userId === 'string' ? result.userId : 'current-user',
+    whyNotReasons: result.whyNotReasons ?? result.runnerUpReasons,
+  }
+  return isSavedResult(normalized) ? normalized : null
+}
+
 // Confirm these IDs and answer values with the backend scoring contract before production use.
 const questQuestions: QuestQuestion[] = [
   { id: 'q1', prompt: 'What should your AI optimize for first?', hint: 'Choose the signal that matters most to this mission.', options: [{ label: 'Accuracy', value: 'accuracy', description: 'Dependable answers for high-stakes work.' }, { label: 'Speed', value: 'speed', description: 'Fast responses for real-time experiences.' }, { label: 'Cost', value: 'cost', description: 'More capability for every budget.' }] },
@@ -98,7 +118,7 @@ export function QuestPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const question = questQuestions[currentIndex]
-  const selectedAnswer = answers[question.id]
+  const selectedAnswer = answers[question.id] ?? ''
   const isFinalQuestion = currentIndex === questQuestions.length - 1
 
   const continueQuest = async () => {
@@ -109,6 +129,7 @@ export function QuestPage() {
     try {
       const response = await fetch(`${questApiBaseUrl}/api/quest/submit`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers: questQuestions.map(({ id }) => ({ questionId: id, answer: answers[id] })) }) })
       const payload = await response.json().catch(() => ({})) as { profile?: DNAProfile; error?: string; message?: string }
+      if (response.status === 401) throw new Error('Please log in to shape your AI DNA.')
       if (!response.ok || !payload.profile) throw new Error(payload.error || payload.message || 'We could not shape your AI DNA. Please try again.')
       navigate('/dna', { state: { profile: payload.profile } })
     } catch (caughtError) {
@@ -116,7 +137,7 @@ export function QuestPage() {
     } finally { setIsSubmitting(false) }
   }
 
-  return <section className="quest-page page-container"><div className="quest-topline"><Link to="/" className="quest-exit">← Exit quest</Link><span>AI ARENA / PERSONALIZATION PROTOCOL</span></div><div className="quest-panel"><div className="quest-progress"><div><span>QUEST {String(currentIndex + 1).padStart(2, '0')} / {String(questQuestions.length).padStart(2, '0')}</span><span>{Math.round(((currentIndex + 1) / questQuestions.length) * 100)}% complete</span></div><div className="quest-progress__track" role="progressbar" aria-label="Quest progress" aria-valuemin={0} aria-valuemax={questQuestions.length} aria-valuenow={currentIndex + 1}><span style={{ width: `${((currentIndex + 1) / questQuestions.length) * 100}%` }} /></div></div><p className="eyebrow"><i /> Your mission, decoded</p><h1>{question.prompt}</h1><p className="quest-hint">{question.hint}</p><div className="quest-options" role="radiogroup" aria-label={question.prompt}>{question.options.map((option) => <button type="button" role="radio" aria-checked={selectedAnswer === option.value} onClick={() => { setAnswers((current) => ({ ...current, [question.id]: option.value })); setError('') }} className={selectedAnswer === option.value ? 'is-selected' : ''} key={option.value}><span className="quest-option__indicator" /><span><b>{option.label}</b><small>{option.description}</small></span><span className="quest-option__arrow">→</span></button>)}</div>{error && <p className="quest-error" role="alert">{error}</p>}<div className="quest-actions"><button className="quest-back" type="button" disabled={currentIndex === 0 || isSubmitting} onClick={() => { setCurrentIndex((index) => index - 1); setError('') }}>Back</button><button className="button" type="button" disabled={!selectedAnswer || isSubmitting} onClick={continueQuest}>{isSubmitting ? 'Shaping your AI DNA…' : isFinalQuestion ? 'Shape my AI DNA' : 'Continue'} <span>→</span></button></div></div></section>
+  return <section className="quest-page page-container"><div className="quest-topline"><Link to="/" className="quest-exit">← Exit quest</Link><span>AI ARENA / PERSONALIZATION PROTOCOL</span></div><div className="quest-panel"><div className="quest-progress"><div><span>QUEST {String(currentIndex + 1).padStart(2, '0')} / {String(questQuestions.length).padStart(2, '0')}</span><span>{Math.round(((currentIndex + 1) / questQuestions.length) * 100)}% complete</span></div><div className="quest-progress__track" role="progressbar" aria-label="Quest progress" aria-valuemin={0} aria-valuemax={questQuestions.length} aria-valuenow={currentIndex + 1}><span style={{ width: `${((currentIndex + 1) / questQuestions.length) * 100}%` }} /></div></div><p className="eyebrow"><i /> Your mission, decoded</p><h1>{question.prompt}</h1><p className="quest-hint">{question.hint}</p><div className="quest-options" role="radiogroup" aria-label={question.prompt}>{question.options.map((option) => <button type="button" role="radio" aria-checked={selectedAnswer === option.value} onClick={() => { setAnswers((current) => ({ ...current, [question.id]: option.value })); setError('') }} className={selectedAnswer === option.value ? 'is-selected' : ''} key={option.value}><span className="quest-option__indicator" /><span><b>{option.label}</b><small>{option.description}</small></span><span className="quest-option__arrow">→</span></button>)}</div>{error && <p className="quest-error" role="alert">{error}</p>}<div className="quest-actions"><button className="quest-back" type="button" disabled={currentIndex === 0 || isSubmitting} onClick={() => { setCurrentIndex((index) => index - 1); setError('') }}>Back</button><button className="button" type="button" disabled={isSubmitting || !selectedAnswer} onClick={continueQuest}>{isSubmitting ? 'Shaping your AI DNA…' : isFinalQuestion ? 'Shape my AI DNA' : 'Continue'} <span>→</span></button></div></div></section>
 }
 
 export function DnaProfilePage() {
@@ -156,7 +177,7 @@ export function ResultPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const state = (location.state ?? {}) as ResultState
-  const usesMockResult = !questApiBaseUrl
+  const usesMockResult = false
   const profile = isDNAProfile(state.profile) ? state.profile : usesMockResult ? mockArenaProfile : null
   const winner = isAIModel(state.winner) ? state.winner : usesMockResult ? mockArenaContenders[0] : null
   const runnerUps = Array.isArray(state.runnerUps) && state.runnerUps.every(isAIModel) ? state.runnerUps : usesMockResult ? mockArenaContenders.slice(1) : null
@@ -177,7 +198,7 @@ export function ResultPage() {
       setError('')
       try {
         const [trustResponse, explainResponse, whyNotResponse] = await Promise.all([
-          fetch(`${questApiBaseUrl}/api/result/trust-score`, { method: 'POST', credentials: 'include', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelId: winner.id }) }),
+          fetch(`${questApiBaseUrl}/api/result/trust-score`, { method: 'POST', credentials: 'include', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelId: winner.id, winner }) }),
           fetch(`${questApiBaseUrl}/api/result/explain`, { method: 'POST', credentials: 'include', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, winner, runnerUp: runnerUps[0] }) }),
           fetch(`${questApiBaseUrl}/api/result/why-not`, { method: 'POST', credentials: 'include', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, winner, others: runnerUps }) }),
         ])
@@ -185,11 +206,13 @@ export function ResultPage() {
         const explainPayload = await explainResponse.json().catch(() => ({})) as { explanation?: string; error?: string; message?: string }
         const whyNotPayload = await whyNotResponse.json().catch(() => ({})) as { reasons?: WhyNotReason[]; error?: string; message?: string }
         if (!trustResponse.ok) throw new Error(trustPayload.error || trustPayload.message || 'We could not calculate the Trust Score.')
-        if (!explainResponse.ok) throw new Error(explainPayload.error || explainPayload.message || 'We could not explain this result.')
         if (!whyNotResponse.ok) throw new Error(whyNotPayload.error || whyNotPayload.message || 'We could not load runner-up reasons.')
-        if (typeof trustPayload.modelId !== 'string' || typeof trustPayload.overallTrustScore !== 'number' || !trustPayload.breakdown || typeof explainPayload.explanation !== 'string' || !Array.isArray(whyNotPayload.reasons)) throw new Error('The result service returned an unexpected response.')
+        const generatedExplanation = explainResponse.ok && typeof explainPayload.explanation === 'string' && explainPayload.explanation.trim()
+          ? explainPayload.explanation
+          : `${winner.name} is the best fit for this AI DNA because it leads the current arena result while matching your strongest priorities.`
+        if (typeof trustPayload.modelId !== 'string' || typeof trustPayload.overallTrustScore !== 'number' || !trustPayload.breakdown || !Array.isArray(whyNotPayload.reasons)) throw new Error('The result service returned an unexpected response.')
         setTrustScore({ modelId: trustPayload.modelId, overallTrustScore: trustPayload.overallTrustScore, breakdown: trustPayload.breakdown })
-        setExplanation(explainPayload.explanation)
+        setExplanation(generatedExplanation)
         setWhyNotReasons(whyNotPayload.reasons)
         setStatus('success')
       } catch (caughtError) {
@@ -210,9 +233,14 @@ export function ResultPage() {
     setSaveError('')
     try {
       const response = await fetch(`${questApiBaseUrl}/api/results`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner, runnerUps, trustScore, profile, explanation, whyNotReasons }) })
-      const payload = await response.json().catch(() => ({})) as { id?: string; error?: string; message?: string }
-      if (!response.ok || typeof payload.id !== 'string') throw new Error(payload.error || payload.message || 'We could not save your result.')
-      navigate(`/passport/${payload.id}`)
+      const payload = await response.json().catch(() => ({})) as { result?: { id?: string }; id?: string; error?: string; message?: string }
+      if (response.status === 401) {
+        navigate('/passport', { state: { result: { id: 'local-passport', userId: 'local-user', winner, runnerUps, trustScore, profile, explanation, whyNotReasons, createdAt: new Date().toISOString() }, matchScore } })
+        return
+      }
+      const savedId = payload.result?.id ?? payload.id
+      if (!response.ok || typeof savedId !== 'string') throw new Error(payload.error || payload.message || 'We could not save your result.')
+      navigate(`/passport/${savedId}`)
     } catch (caughtError) {
       setSaveError(caughtError instanceof Error ? caughtError.message : 'We could not save your result.')
     } finally { setIsSaving(false) }
@@ -231,7 +259,9 @@ export function ResultPage() {
 export function PassportPage() {
   const { id } = useParams()
   const location = useLocation()
-  const usesMockPassport = !id || !questApiBaseUrl
+  const state = (location.state ?? {}) as PassportPageState
+  const stateResult = isSavedResult(state.result) ? state.result : null
+  const usesMockPassport = !id && !stateResult
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [result, setResult] = useState<SavedResult | null>(null)
   const [error, setError] = useState('')
@@ -246,8 +276,9 @@ export function PassportPage() {
         const response = await fetch(`${questApiBaseUrl}/api/results/${encodeURIComponent(id)}`, { credentials: 'include', signal: controller.signal })
         const payload = await response.json().catch(() => ({})) as unknown
         if (!response.ok) { const message = payload as { error?: string; message?: string }; throw new Error(message.error || message.message || 'We could not load this Model Passport.') }
-        if (!isSavedResult(payload)) throw new Error('The saved result returned an unexpected response.')
-        setResult(payload); setStatus('success')
+        const savedResult = parseSavedResult(payload)
+        if (!savedResult) throw new Error('The saved result returned an unexpected response.')
+        setResult(savedResult); setStatus('success')
       } catch (caughtError) {
         if (caughtError instanceof DOMException && caughtError.name === 'AbortError') return
         setError(caughtError instanceof Error ? caughtError.message : 'We could not load this Model Passport.'); setStatus('error')
@@ -257,14 +288,13 @@ export function PassportPage() {
     return () => controller.abort()
   }, [id, usesMockPassport])
 
-  const passportResult = usesMockPassport ? mockPassportResult : result
-  if (!usesMockPassport && status === 'loading') return <section className="passport-page page-container"><p className="eyebrow"><i /> Step 05 / Model Passport</p><div className="passport-loading"><span /><strong>Retrieving your passport…</strong><small>Loading the saved Arena verdict</small></div></section>
-  if (!usesMockPassport && (status === 'error' || !passportResult)) return <section className="passport-page page-container"><p className="eyebrow"><i /> Step 05 / Model Passport</p><div className="passport-message"><h1>This passport is unavailable.</h1><p>{error}</p><Link className="button" to="/arena">Return to Arena <span>→</span></Link></div></section>
+  const passportResult = stateResult ?? (usesMockPassport ? mockPassportResult : result)
+  if (id && !stateResult && status === 'loading') return <section className="passport-page page-container"><p className="eyebrow"><i /> Step 05 / Model Passport</p><div className="passport-loading"><span /><strong>Retrieving your passport…</strong><small>Loading the saved Arena verdict</small></div></section>
+  if (id && !stateResult && (status === 'error' || !passportResult)) return <section className="passport-page page-container"><p className="eyebrow"><i /> Step 05 / Model Passport</p><div className="passport-message"><h1>This passport is unavailable.</h1><p>{error}</p><Link className="button" to="/arena">Return to Arena <span>→</span></Link></div></section>
 
   if (!passportResult) return null
 
   const createdAt = new Date(passportResult.createdAt)
-  const state = (location.state ?? {}) as PassportPageState
   const matchScore = state.matchScore ?? (usesMockPassport ? 96 : undefined)
   const ranking = state.ranking ?? (usesMockPassport ? 1 : undefined)
   const bestUseCases = state.bestUseCases ?? ['Privacy-sensitive product teams', 'High-confidence research assistance', 'Complex workflow planning']
@@ -295,6 +325,30 @@ export function DeploymentPage() {
 
   return <section className="deployment-page page-container"><div className="deployment-topline"><span>DEPLOYMENT CONFIGURATION</span><span>06 / 06 · READY</span></div><div className="deployment-heading"><div><p className="eyebrow"><i /> Step 06 / Deployment</p><h1>Ready for the<br /><em>real world.</em></h1></div><p>Your winning model is configured. Tune the deployment settings, then take the generated starter config into your product.</p></div><section className="deployment-success"><span>✓</span><div><strong>Deployment profile ready</strong><p>{selectedWinner.name} is selected as your recommended model.</p></div><small>CONFIG GENERATED</small></section><div className="deployment-grid"><section className="deployment-settings"><div className="deployment-model"><span>{selectedWinner.name.charAt(0)}</span><div><small>SELECTED MODEL</small><h2>{selectedWinner.name}</h2><p>{selectedWinner.provider}</p></div><b>Recommended for You</b></div><div className="deployment-fields"><label>Temperature <output>{temperature}</output><input type="range" min="0" max="1" step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} /></label><label>Max tokens <select value={maxTokens} onChange={(event) => setMaxTokens(event.target.value)}><option value="512">512</option><option value="1024">1024</option><option value="2048">2048</option></select></label><label>Response format <select defaultValue="json"><option value="json">JSON object</option><option value="text">Plain text</option></select></label></div><div className="deployment-note"><span>✦</span><p>These are mock frontend settings. Connect your provider credentials when the backend deployment flow is ready.</p></div></section><section className="deployment-code"><div className="deployment-code__header"><div><span>GENERATED CONFIG</span><strong>{framework}</strong></div><div>{(['JavaScript', 'Python', 'cURL'] as const).map((option) => <button type="button" key={option} className={framework === option ? 'is-active' : ''} onClick={() => setFramework(option)}>{option}</button>)}</div></div><pre><code>{config}</code></pre><button className="deployment-copy" type="button" onClick={() => void copyConfig()}>{isCopied ? '✓ Copied to clipboard' : 'Copy Config'} <span>{isCopied ? '' : '↗'}</span></button></section></div><div className="deployment-footer"><span>AI ARENA · {selectedWinner.name.toUpperCase()} CONFIG</span><Link className="button" to="/history">View My Passports <span>→</span></Link></div></section>
 }
-function AuthPage({ signup }: { signup?: boolean }) { return <section className="auth-page"><Brand /><div className="auth-card"><p className="eyebrow">{signup ? 'Create your profile' : 'Welcome back'}</p><h1>{signup ? 'Claim your place.' : 'Return to the arena.'}</h1>{signup && <input placeholder="Your name" />}<input placeholder="Email address" type="email" /><input placeholder="Password" type="password" /><button className="button">{signup ? 'Enter the arena' : 'Log in'} <span>→</span></button><p>{signup ? 'Already a challenger?' : 'New challenger?'} <Link to={signup ? '/login' : '/signup'}>{signup ? 'Log in' : 'Create an account'}</Link></p></div></section> }
+function AuthPage({ signup }: { signup?: boolean }) {
+  const navigate = useNavigate()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const submit = async () => {
+    setError('')
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`${questApiBaseUrl}/api/auth/${signup ? 'signup' : 'login'}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(signup ? { email, password, name } : { email, password }) })
+      const payload = await response.json().catch(() => ({})) as { user?: unknown; error?: string; message?: string }
+      if (!response.ok || !payload.user) throw new Error(payload.error || payload.message || (signup ? 'We could not create your account.' : 'We could not log you in.'))
+      navigate('/quest')
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Authentication failed.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return <section className="auth-page"><Brand /><div className="auth-card"><p className="eyebrow">{signup ? 'Create your profile' : 'Welcome back'}</p><h1>{signup ? 'Claim your place.' : 'Return to the arena.'}</h1>{signup && <input placeholder="Your name" value={name} onChange={(event) => setName(event.target.value)} />}<input placeholder="Email address" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /><input placeholder="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />{error && <p role="alert">{error}</p>}<button className="button" type="button" disabled={isSubmitting} onClick={() => void submit()}>{isSubmitting ? (signup ? 'Creating account…' : 'Logging in…') : signup ? 'Enter the arena' : 'Log in'} <span>→</span></button><p>{signup ? 'Already a challenger?' : 'New challenger?'} <Link to={signup ? '/login' : '/signup'}>{signup ? 'Log in' : 'Create an account'}</Link></p></div></section>
+}
 export const LoginPage = () => <AuthPage />
 export const SignUpPage = () => <AuthPage signup />

@@ -1,5 +1,10 @@
 import type { AIModel } from "@/types/ai-model";
-import type { TrustScoreBreakdown, TrustScoreResponse } from "@/types/api";
+import type {
+  ResultModelInput,
+  TrustScoreBreakdown,
+  TrustScoreResponse,
+} from "@/types/api";
+import { getResultModelId } from "@/lib/result/model-input";
 import { roundScore } from "@/lib/scoring/weights";
 
 const TRUST_FACTOR_WEIGHTS = {
@@ -35,6 +40,26 @@ export function calculateTrustScore(model: AIModel): TrustScoreResponse {
     overallTrustScore,
     breakdown,
   };
+}
+
+export function calculateTrustScoreFromResultModel(
+  model: ResultModelInput,
+): TrustScoreResponse {
+  return calculateTrustScore({
+    id: getResultModelId(model),
+    name: model.name,
+    provider: model.provider,
+    description: "",
+    taskTypes: [],
+    accuracy: model.accuracy,
+    speed: model.speed,
+    cost: model.cost,
+    privacy: model.privacy,
+    easeOfUse: model.easeOfUse,
+    hardware: "",
+    license: "",
+    benchmarkSource: "",
+  });
 }
 
 function calculateEvidenceQuality(benchmarkSource: string) {

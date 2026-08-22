@@ -123,12 +123,14 @@ function toQuestHistoryItem(
 function toSavedResult(result: WithId<ArenaResultDocument>): SavedResult {
   return {
     id: result._id.toHexString(),
+    userId: result.userId,
     winner: result.winner,
     runnerUps: result.runnerUps,
     trustScore: result.trustScore,
     profile: result.profile,
     explanation: result.explanation,
     runnerUpReasons: result.runnerUpReasons,
+    whyNotReasons: result.runnerUpReasons,
     createdAt: result.createdAt.toISOString(),
   };
 }
