@@ -23,24 +23,39 @@ export const questQuestions: QuestQuestion[] = [
     options: [
       { id: "accuracy", points: { accuracy: 5 } },
       { id: "speed", points: { speed: 5 } },
-      { id: "privacy", points: { privacy: 5 } },
-      { id: "ease-of-use", points: { easeOfUse: 5 } },
+      { id: "cost", points: { cost: 5 } },
     ],
   },
   {
     id: "q2",
     options: [
-      { id: "edge", points: { privacy: 3, speed: 2 } },
-      { id: "cloud", points: { easeOfUse: 3, accuracy: 2 } },
-      { id: "hybrid", points: { privacy: 2, easeOfUse: 2, speed: 1 } },
+      { id: "realtime", points: { speed: 5 } },
+      { id: "balanced", points: { speed: 2, accuracy: 3 } },
+      { id: "deliberate", points: { accuracy: 5 } },
     ],
   },
   {
     id: "q3",
     options: [
-      { id: "low-cost", points: { cost: 5 } },
+      { id: "lean", points: { cost: 5 } },
       { id: "balanced", points: { cost: 2, accuracy: 2, speed: 1 } },
-      { id: "best-quality", points: { accuracy: 4, easeOfUse: 1 } },
+      { id: "premium", points: { accuracy: 4, easeOfUse: 1 } },
+    ],
+  },
+  {
+    id: "q4",
+    options: [
+      { id: "standard", points: { easeOfUse: 3, cost: 2 } },
+      { id: "sensitive", points: { privacy: 3, accuracy: 2 } },
+      { id: "private", points: { privacy: 5 } },
+    ],
+  },
+  {
+    id: "q5",
+    options: [
+      { id: "developers", points: { accuracy: 3, speed: 2 } },
+      { id: "teams", points: { easeOfUse: 3, accuracy: 2 } },
+      { id: "everyone", points: { easeOfUse: 5 } },
     ],
   },
 ];
