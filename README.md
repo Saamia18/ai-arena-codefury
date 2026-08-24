@@ -229,8 +229,8 @@ _Add screenshots or a short demo GIF/video for each stage of the flow:_
 
 | Name | Role |
 |---|---|
-| _[Your name]_ | Frontend / UI-UX |
-| _[Teammate's name]_ | Backend |
+| _[Umra Hafsa]_ | Frontend / UI-UX |
+| _[Saamia Nadeem Paniwale]_ | Backend |
 
 ---
 
